@@ -368,6 +368,6 @@ async fn main() -> Result<(), Error> {
     )
     .hook("commitment_revocation", on_commitment_revocation);
 
-    let plugin = builder.start().await.unwrap();
+    let plugin = builder.start().await.unwrap().unwrap();
     plugin.join().await
 }
