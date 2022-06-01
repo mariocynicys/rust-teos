@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
+use std::sync::mpsc::Sender;
 use std::sync::{Arc, Mutex};
 use tokio::fs;
 
@@ -21,6 +22,8 @@ pub struct WTClient {
     pub dbm: Arc<Mutex<DBM>>,
     /// A collection of towers the client is registered to.
     pub towers: HashMap<TowerId, TowerSummary>,
+    /// Queue of unreachable towers
+    pub unreachable_towers: Sender<TowerId>,
     /// The user secret key.
     pub user_sk: SecretKey,
     /// The user identifier.
@@ -28,7 +31,7 @@ pub struct WTClient {
 }
 
 impl WTClient {
-    pub async fn new(data_dir: PathBuf) -> Self {
+    pub async fn new(data_dir: PathBuf, unreachable_towers: Sender<TowerId>) -> Self {
         // Create data dir if it does not exist
         fs::create_dir_all(&data_dir).await.unwrap_or_else(|e| {
             log::error!("Cannot create data dir: {:?}", e);
@@ -49,13 +52,21 @@ impl WTClient {
             }
         };
 
+        let towers = dbm.load_towers();
+        for (tower_id, tower) in towers.iter() {
+            if tower.status.is_unreachable() {
+                unreachable_towers.send(*tower_id).unwrap();
+            }
+        }
+
         log::info!(
             "Plugin watchtower client initialized. User id = {}",
             user_id
         );
 
         WTClient {
-            towers: dbm.load_towers(),
+            towers,
+            unreachable_towers,
             dbm: Arc::new(Mutex::new(dbm)),
             user_sk,
             user_id,
@@ -139,6 +150,23 @@ impl WTClient {
         }
     }
 
+    pub fn remove_pending_appointment(&mut self, tower_id: TowerId, locator: Locator) {
+        if let Some(tower) = self.towers.get_mut(&tower_id) {
+            tower.pending_appointments.remove(&locator);
+
+            self.dbm
+                .lock()
+                .unwrap()
+                .delete_pending_appointment(tower_id, locator)
+                .unwrap();
+        } else {
+            log::error!(
+                "Cannot remove pending appointment to tower. Unknown tower_id: {}",
+                tower_id
+            );
+        }
+    }
+
     /// Adds an invalid appointment to the tower record.
     pub fn add_invalid_appointment(&mut self, tower_id: TowerId, appointment: &Appointment) {
         if let Some(tower) = self.towers.get_mut(&tower_id) {
@@ -176,6 +204,8 @@ impl WTClient {
 mod tests {
     use super::*;
 
+    use std::sync::mpsc::channel;
+
     use teos_common::test_utils::{
         generate_random_appointment, get_random_appointment_receipt,
         get_random_registration_receipt, get_random_user_id,
@@ -184,7 +214,8 @@ mod tests {
     #[tokio::test]
     async fn test_add_update_load_tower() {
         let tmp_path = &format!(".watchtower_{}/", get_random_user_id());
-        let mut wt_client = WTClient::new(tmp_path.into()).await;
+        let (tx, rx) = channel();
+        let mut wt_client = WTClient::new(tmp_path.into(), tx).await;
 
         // Adding a new tower will add a summary to towers and the full data to the
         let receipt = get_random_registration_receipt();
@@ -226,7 +257,8 @@ mod tests {
     #[tokio::test]
     async fn test_set_tower_status() {
         let tmp_path = &format!(".watchtower_{}/", get_random_user_id());
-        let mut wt_client = WTClient::new(tmp_path.into()).await;
+        let (tx, rx) = channel();
+        let mut wt_client = WTClient::new(tmp_path.into(), tx).await;
 
         // If the tower is unknown nothing will happen
         let unknown_tower = get_random_user_id();
@@ -255,7 +287,8 @@ mod tests {
     #[tokio::test]
     async fn test_add_appointment_receipt() {
         let tmp_path = &format!(".watchtower_{}/", get_random_user_id());
-        let mut wt_client = WTClient::new(tmp_path.into()).await;
+        let (tx, rx) = channel();
+        let mut wt_client = WTClient::new(tmp_path.into(), tx).await;
 
         let (tower_sk, tower_pk) = cryptography::get_random_keypair();
         let tower_id = TowerId(tower_pk);
@@ -304,7 +337,8 @@ mod tests {
     #[tokio::test]
     async fn test_add_pending_appointment() {
         let tmp_path = &format!(".watchtower_{}/", get_random_user_id());
-        let mut wt_client = WTClient::new(tmp_path.into()).await;
+        let (tx, rx) = channel();
+        let mut wt_client = WTClient::new(tmp_path.into(), tx).await;
 
         let (_, tower_pk) = cryptography::get_random_keypair();
         let tower_id = TowerId(tower_pk);
@@ -347,7 +381,8 @@ mod tests {
     #[tokio::test]
     async fn test_add_invalid_appointment() {
         let tmp_path = &format!(".watchtower_{}/", get_random_user_id());
-        let mut wt_client = WTClient::new(tmp_path.into()).await;
+        let (tx, rx) = channel();
+        let mut wt_client = WTClient::new(tmp_path.into(), tx).await;
 
         let (_, tower_pk) = cryptography::get_random_keypair();
         let tower_id = TowerId(tower_pk);
@@ -386,7 +421,8 @@ mod tests {
     #[tokio::test]
     async fn test_flag_misbehaving_tower() {
         let tmp_path = &format!(".watchtower_{}/", get_random_user_id());
-        let mut wt_client = WTClient::new(tmp_path.into()).await;
+        let (tx, rx) = channel();
+        let mut wt_client = WTClient::new(tmp_path.into(), tx).await;
 
         let (tower_sk, tower_pk) = cryptography::get_random_keypair();
         let tower_id = TowerId(tower_pk);

@@ -10,6 +10,7 @@ use teos_common::UserId as TowerId;
 pub mod convert;
 pub mod dbm;
 pub mod net;
+pub mod retrier;
 mod ser;
 pub mod wt_client;
 
@@ -53,6 +54,11 @@ impl TowerStatus {
         *self == TowerStatus::Reachable
     }
 
+    /// Wether the tower is unreachable or not.
+    pub fn is_unreachable(&self) -> bool {
+        *self == TowerStatus::TemporaryUnreachable || *self == TowerStatus::Unreachable
+    }
+
     /// Wether the tower is misbehaving or not.
     pub fn is_misbehaving(&self) -> bool {
         *self == TowerStatus::Misbehaving
@@ -80,9 +86,6 @@ pub struct TowerSummary {
 impl TowerSummary {
     /// Creates a new [TowerSummary] instance.
     pub fn new(net_addr: String, available_slots: u32, subscription_expiry: u32) -> Self {
-        // DISCUSS: Tower summary is always built assuming the tower is reachable. This makes sense after registering, since the connection has
-        // been tested. However, when loading data from the database we may want to test that assumption.
-        // Notice the state is not stored in the DB.
         Self {
             net_addr,
             available_slots,

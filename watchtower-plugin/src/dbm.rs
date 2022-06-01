@@ -218,6 +218,8 @@ impl DBM {
             // TODO: Check if there is any way of checking this without having to actually load the data
             if self.load_misbehaving_proof(tower_id).is_ok() {
                 tower.status = TowerStatus::Misbehaving;
+            } else if !tower.pending_appointments.is_empty() {
+                tower.status = TowerStatus::TemporaryUnreachable;
             }
 
             towers.insert(tower_id, tower);
@@ -343,6 +345,51 @@ impl DBM {
             params![appointment.locator.to_vec(), tower_id.to_vec(),],
         )?;
 
+        tx.commit()
+    }
+
+    /// Removes an appointment from the database.
+    pub fn delete_pending_appointment(
+        &mut self,
+        tower_id: TowerId,
+        locator: Locator,
+    ) -> Result<(), SqliteError> {
+        // We will delete data from pending_appointments or from appointments depending on whether the later has a single reference
+        // to it or not. If that's the case, deleting an entry from appointments will trigger a cascade deletion of the entry in pending.
+        // If there are other references, this will be deleted when removing the last one.
+        let count =
+            {
+                let mut stmt = self
+            .connection
+            .prepare("SELECT COUNT(*) FROM pending_appointments WHERE locator=?1 AND tower_id=?2")
+            .unwrap();
+                let pending = stmt
+                    .query_row(params![locator.to_vec(), tower_id.to_vec(),], |row| {
+                        row.get::<_, u32>(0)
+                    })
+                    .unwrap();
+
+                let mut stmt = self
+            .connection
+            .prepare("SELECT COUNT(*) FROM invalid_appointments WHERE locator=?1 AND tower_id=?2")
+            .unwrap();
+                let invalid = stmt
+                    .query_row(params![locator.to_vec(), tower_id.to_vec(),], |row| {
+                        row.get::<_, u32>(0)
+                    })
+                    .unwrap_or(0);
+
+                pending + invalid
+            };
+
+        let query = if count == 1 {
+            "DELETE FROM pending_appointments WHERE locator=?1 AND tower_id=?2"
+        } else {
+            "DELETE FROM appointments WHERE locator=?1 AND tower_id=?2"
+        };
+
+        let tx = self.get_mut_connection().transaction().unwrap();
+        tx.execute(query, params![locator.to_vec(), tower_id.to_vec(),])?;
         tx.commit()
     }
 
