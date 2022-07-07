@@ -20,8 +20,9 @@ jobs:
           path: lightning
           key: ${{ runner.os }}-build-${{ env.cln_cache_name }}-v${{ env.cln_version }}
       - name: Compile CLN
-        if: steps.cache-cln.outputs.cache-hit != 'true'
+        #if: steps.cache-cln.outputs.cache-hit != 'true'
         run: |
+          echo ${{ steps.cache-cln.outputs.cache-hit }}
           sudo apt-get update && sudo apt-get install gettext
           git clone https://github.com/ElementsProject/lightning.git && cd lightning && git checkout v${{ env.cln_version }}
           pip install --user poetry && poetry install
