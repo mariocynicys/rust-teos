@@ -20,7 +20,8 @@ jobs:
           path: lightning
           key: ${{ runner.os }}-build-${{ env.cln_cache_name }}-v${{ env.cln_version }}
       - name: Compile CLN
-        if: steps.cache-cln.outputs.cache-hit != 'true'
+        #if: steps.cache-cln.outputs.cache-hit != 'true'
+        # the comments below assume cache hit
         run: |
           echo ${{ steps.cache-cln.outputs.cache-hit }} # -> true
           echo ${{ steps.cache-cln.outputs.cache-hit != 'true' }} # -> false (meaning hit=='true')
