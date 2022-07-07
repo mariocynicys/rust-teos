@@ -33,10 +33,10 @@ jobs:
         if: steps.cache-cln.outputs.cache-hit == 'true'
         run: |
           echo "hit"
-       name: On Cache hit in french braces
+      - name: On Cache hit in french braces
         if: ${{ steps.cache-cln.outputs.cache-hit == 'true' }}
         run: |
-          echo "hit"
+          echo "french hit"
 
   cln-plugin:
     needs: cache-cln
