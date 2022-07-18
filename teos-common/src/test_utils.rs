@@ -53,19 +53,18 @@ pub fn generate_random_appointment(dispute_txid: Option<&Txid>) -> Appointment {
 }
 
 pub fn get_random_registration_receipt() -> RegistrationReceipt {
-    let (sk, _) = cryptography::get_random_keypair();
-    let start = get_random_int();
-    let mut receipt =
-        RegistrationReceipt::new(get_random_user_id(), get_random_int(), start, start + 420);
-    receipt.sign(&sk);
-
-    receipt
+    get_random_registration_receipt_with_expiry(get_random_int::<u32>() + 420)
 }
 
 pub fn get_random_registration_receipt_with_expiry(expiry: u32) -> RegistrationReceipt {
     let (sk, _) = cryptography::get_random_keypair();
-    let mut receipt =
-        RegistrationReceipt::new(get_random_user_id(), get_random_int(), expiry - 420, expiry);
+    let mut receipt = RegistrationReceipt::new(
+        get_random_user_id(),
+        // Keep this number low, as it gets added frequenly in tests and could result in an overflow.
+        get_random_int::<u32>() % 10_000_000,
+        expiry - 420,
+        expiry,
+    );
     receipt.sign(&sk);
 
     receipt

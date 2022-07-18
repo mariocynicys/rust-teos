@@ -149,7 +149,7 @@ impl DBM {
     ) -> Result<(), Error> {
         let tx = self.get_mut_connection().transaction().unwrap();
         tx.execute(
-            "INSERT INTO towers (tower_id, net_addr, available_slots) VALUES (?1, ?2, ?3) ON CONFLICT (tower_id) DO UPDATE SET net_addr = ?2, available_slots = ?3",
+            "INSERT INTO towers (tower_id, net_addr, available_slots) VALUES (?1, ?2, ?3) ON CONFLICT (tower_id) DO UPDATE SET net_addr = ?2, available_slots = available_slots + ?3",
             params![tower_id.to_vec(), net_addr, receipt.available_slots()],
         )
         .map_err( Error::Unknown)?;
@@ -699,23 +699,37 @@ mod tests {
         let mut towers = HashMap::new();
 
         // In order to add a tower record we need to associated registration receipt.
-        for _ in 0..5 {
+        for _ in 0..10 {
             let tower_id = get_random_user_id();
             let net_addr = "talaia.watch";
+            let mut total_slots = 0;
+            let mut max_receipt: Option<RegistrationReceipt> = None;
 
-            let receipt = get_random_registration_receipt();
+            // Add not only one registration receipt to test if the tower retrieves the one with furthest expiry date.
+            for _ in 0..10 {
+                let receipt = get_random_registration_receipt();
+                if let Some(ref mut max_receipt) = max_receipt {
+                    if receipt.subscription_expiry() > max_receipt.subscription_expiry() {
+                        *max_receipt = receipt.clone();
+                    }
+                } else {
+                    max_receipt = Some(receipt.clone());
+                }
+
+                dbm.store_tower_record(tower_id, net_addr, &receipt)
+                    .unwrap();
+                total_slots += receipt.available_slots();
+            }
+            let max_receipt = max_receipt.unwrap();
             towers.insert(
                 tower_id,
                 TowerSummary::new(
                     net_addr.into(),
-                    receipt.available_slots(),
-                    receipt.subscription_start(),
-                    receipt.subscription_expiry(),
+                    total_slots,
+                    max_receipt.subscription_start(),
+                    max_receipt.subscription_expiry(),
                 ),
             );
-
-            dbm.store_tower_record(tower_id, net_addr, &receipt)
-                .unwrap();
         }
 
         assert_eq!(dbm.load_towers(), towers);
