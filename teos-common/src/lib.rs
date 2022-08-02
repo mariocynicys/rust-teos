@@ -11,6 +11,7 @@ pub mod constants;
 pub mod cryptography;
 pub mod dbm;
 pub mod errors;
+pub mod lightning;
 pub mod receipts;
 pub mod ser;
 pub mod test_utils;
