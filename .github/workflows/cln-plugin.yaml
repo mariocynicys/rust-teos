@@ -1,7 +1,5 @@
 name: CI tests for CLN watchtower-plugin
 
-on: [push, pull_request]
-
 env:
   bitcoind_version: 0.20.1
   cln_version: 0.11.0.1
