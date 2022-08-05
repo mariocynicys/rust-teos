@@ -29,7 +29,12 @@ jobs:
           override: true
       - name: Install Rust targets for ${{ matrix.platform }}
         run: |
+          rustup target list --installed
           rustup target add ${{ matrix.targets }}
+      - name: Install musl-tools for ubuntu-latest
+        if: matrix.platform == 'ubuntu-latest'
+        run: |
+          apt update && apt install -y musl-tools
       - name: Build on Rust ${{ matrix.toolchain }} for ${{ matrix.targets }}
         run: |
           for target in ${{ matrix.targets }}
