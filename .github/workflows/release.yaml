@@ -34,7 +34,7 @@ jobs:
       - name: Install musl-tools for ubuntu-latest
         if: matrix.platform == 'ubuntu-latest'
         run: |
-          apt update && apt install -y musl-tools
+          sudo apt update && sudo apt install -y musl-tools
       - name: Build on Rust ${{ matrix.toolchain }} for ${{ matrix.targets }}
         run: |
           for target in ${{ matrix.targets }}
