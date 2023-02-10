@@ -141,7 +141,37 @@ impl Watcher {
     ) -> Self {
         let mut appointments = HashMap::new();
         let mut locator_uuid_map: HashMap<Locator, HashSet<UUID>> = HashMap::new();
-        for (uuid, appointment) in dbm.lock().unwrap().load_appointments(None) {
+
+        let locked_db = dbm.lock().unwrap();
+        let sql =
+            "SELECT a.UUID, a.locator, a.encrypted_blob, a.to_self_delay, a.user_signature, a.start_block, a.user_id
+                FROM appointments as a LEFT JOIN trackers as t ON a.UUID=t.UUID WHERE t.UUID IS NULL".to_string();
+        let mut stmt = locked_db.connection.prepare(&sql).unwrap();
+
+        let rows = stmt.query([]).unwrap();
+
+        let apps = rows
+            .mapped(|row| {
+                let raw_uuid: Vec<u8> = row.get(0).unwrap();
+                let uuid = UUID::from_slice(&raw_uuid[0..20]).unwrap();
+                let raw_locator: Vec<u8> = row.get(1).unwrap();
+                let locator = Locator::from_slice(&raw_locator).unwrap();
+                let raw_userid: Vec<u8> = row.get(6).unwrap();
+                let user_id = UserId::from_slice(&raw_userid).unwrap();
+
+                let appointment =
+                    Appointment::new(locator, row.get(2).unwrap(), row.get(3).unwrap());
+                let appointment = ExtendedAppointment::new(
+                    appointment,
+                    user_id,
+                    row.get(4).unwrap(),
+                    row.get(5).unwrap(),
+                );
+                Ok((uuid, appointment))
+            })
+            .filter_map(|d| d.ok());
+
+        for (uuid, appointment) in apps {
             appointments.insert(uuid, appointment.get_summary());
 
             if let Some(map) = locator_uuid_map.get_mut(&appointment.locator()) {
@@ -150,6 +180,8 @@ impl Watcher {
                 locator_uuid_map.insert(appointment.locator(), HashSet::from_iter(vec![uuid]));
             }
         }
+        drop(stmt);
+        drop(locked_db);
 
         Watcher {
             appointments: Mutex::new(appointments),

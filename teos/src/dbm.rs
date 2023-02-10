@@ -68,7 +68,7 @@ const TABLES: [&str; 5] = [
 #[derive(Debug)]
 pub struct DBM {
     /// The underlying database connection.
-    connection: Connection,
+    pub connection: Connection,
 }
 
 impl DatabaseConnection for DBM {
