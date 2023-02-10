@@ -3,6 +3,7 @@
 
 use std::collections::{HashMap, HashSet};
 use std::iter::FromIterator;
+use std::mem::size_of;
 use std::path::PathBuf;
 use std::str::FromStr;
 
@@ -68,7 +69,7 @@ const TABLES: [&str; 5] = [
 #[derive(Debug)]
 pub struct DBM {
     /// The underlying database connection.
-    connection: Connection,
+    pub connection: Connection,
 }
 
 impl DatabaseConnection for DBM {
@@ -322,12 +323,16 @@ impl DBM {
         }
         let mut stmt = self.connection.prepare(&sql).unwrap();
 
+        let started = tokio::time::Instant::now();
         let mut rows = if let Some(locator) = locator {
             stmt.query([locator.to_vec()]).unwrap()
         } else {
             stmt.query([]).unwrap()
         };
+        let time = tokio::time::Instant::now() - started;
+        log::debug!("Queried the databases successfully in {time:?}");
 
+        let mut size = 0;
         while let Ok(Some(row)) = rows.next() {
             let raw_uuid: Vec<u8> = row.get(0).unwrap();
             let uuid = UUID::from_slice(&raw_uuid[0..20]).unwrap();
@@ -347,11 +352,38 @@ impl DBM {
                     row.get(5).unwrap(),
                 ),
             );
+            size += size_of::<UUID>() + size_of::<ExtendedAppointment>();
         }
+        log::debug!(
+            "Total size of extended appointment map {}MiB",
+            size / 1024 / 1024
+        );
 
         appointments
     }
 
+    /// loads all the appointments from the DB in a streamable manner (as an iterator).
+    // a lot of lifetime headache
+    // pub(crate) fn load_all_appointments_iter(&self) {
+    //     let sql =
+    //         "SELECT a.UUID, a.locator, a.encrypted_blob, a.to_self_delay, a.user_signature, a.start_block, a.user_id
+    //             FROM appointments as a LEFT JOIN trackers as t ON a.UUID=t.UUID WHERE t.UUID IS NULL".to_string();
+    //     let mut stmt = self.connection.prepare(&sql).unwrap();
+
+    //     let rows = stmt.query([]).unwrap();
+
+    //     rows.mapped(|row| {
+    //         let raw_uuid: Vec<u8> = row.get(0).unwrap();
+    //         let uuid = UUID::from_slice(&raw_uuid[0..20]).unwrap();
+    //         let raw_locator: Vec<u8> = row.get(1).unwrap();
+    //         let locator = Locator::from_slice(&raw_locator).unwrap();
+    //         let raw_userid: Vec<u8> = row.get(6).unwrap();
+    //         let user_id = UserId::from_slice(&raw_userid).unwrap();
+
+    //         let appointment = Appointment::new(locator, row.get(2).unwrap(), row.get(3).unwrap());
+    //         Ok((uuid, appointment))
+    //     })
+    // }
     /// Removes an [Appointment] from the database.
     pub(crate) fn remove_appointment(&self, uuid: UUID) {
         let query = "DELETE FROM appointments WHERE UUID=(?)";

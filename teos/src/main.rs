@@ -48,6 +48,7 @@ where
 {
     let mut last_n_blocks = Vec::with_capacity(n);
     for _ in 0..n {
+        log::debug!("Polling block: {}", last_known_block.height);
         let block = poller.fetch_block(&last_known_block).await.unwrap();
         last_known_block = poller
             .look_up_previous_header(&last_known_block)
@@ -63,6 +64,20 @@ fn create_new_tower_keypair(db: &DBM) -> (SecretKey, PublicKey) {
     let (sk, pk) = get_random_keypair();
     db.store_tower_key(&sk).unwrap();
     (sk, pk)
+}
+
+fn measure_time<T>(f: impl Fn() -> T) -> (T, std::time::Duration) {
+    let started = tokio::time::Instant::now();
+    let ret = f();
+    (ret, tokio::time::Instant::now() - started)
+}
+
+async fn measure_time_async<T>(
+    f: impl std::future::Future<Output = T>,
+) -> (T, std::time::Duration) {
+    let started = tokio::time::Instant::now();
+    let ret = f.await;
+    (ret, tokio::time::Instant::now() - started)
 }
 
 #[tokio::main]
@@ -115,9 +130,12 @@ async fn main() {
         eprintln!("Cannot create network dir: {e:?}");
         std::process::exit(1);
     });
-    let dbm = Arc::new(Mutex::new(
-        DBM::new(path_network.join("teos_db.sql3")).unwrap(),
-    ));
+    let (dbm, time) = measure_time(|| {
+        Arc::new(Mutex::new(
+            DBM::new(path_network.join("teos_db.sql3")).unwrap(),
+        ))
+    });
+    log::debug!("Loaded the database in {time:?}");
 
     // Load tower secret key or create a fresh one if none is found. If overwrite key is set, create a new
     // key straightaway
@@ -161,6 +179,7 @@ async fn main() {
             std::process::exit(1);
         }
     };
+    log::debug!("Created a bitcoind client successfully");
 
     // FIXME: Temporary. We're using bitcoin_core_rpc and rust-lightning's rpc until they both get merged
     // https://github.com/rust-bitcoin/rust-bitcoincore-rpc/issues/166
@@ -179,16 +198,20 @@ async fn main() {
     let mut derefed = bitcoin_cli.deref();
     // Load last known block from DB if found. Poll it from Bitcoind otherwise.
     let last_known_block = dbm.lock().unwrap().load_last_known_block();
-    let tip = if let Ok(block_hash) = last_known_block {
-        derefed
-            .get_header(&block_hash, None)
-            .await
-            .unwrap()
-            .validate(block_hash)
-            .unwrap()
-    } else {
-        validate_best_block_header(&mut derefed).await.unwrap()
-    };
+    let (tip, time) = measure_time_async(async {
+        if let Ok(block_hash) = last_known_block {
+            derefed
+                .get_header(&block_hash, None)
+                .await
+                .unwrap()
+                .validate(block_hash)
+                .unwrap()
+        } else {
+            validate_best_block_header(&mut derefed).await.unwrap()
+        }
+    })
+    .await;
+    log::debug!("Validated the last known block in {time:?}");
 
     // DISCUSS: This is not really required (and only triggered in regtest). This is only in place so the caches can be
     // populated with enough blocks mainly because the size of the cache is based on the amount of blocks passed when initializing.
@@ -212,18 +235,27 @@ async fn main() {
     };
 
     let mut poller = ChainPoller::new(&mut derefed, Network::from_str(btc_network).unwrap());
-    let last_n_blocks = get_last_n_blocks(&mut poller, tip, IRREVOCABLY_RESOLVED as usize).await;
+    let (last_n_blocks, time) = measure_time_async(async {
+        get_last_n_blocks(&mut poller, tip, IRREVOCABLY_RESOLVED as usize).await
+    })
+    .await;
+    log::debug!("Loaded the last {IRREVOCABLY_RESOLVED} blocks in {time:?}");
 
     // Build components
-    let gatekeeper = Arc::new(Gatekeeper::new(
-        tip.height,
-        conf.subscription_slots,
-        conf.subscription_duration,
-        conf.expiry_delta,
-        dbm.clone(),
-    ));
+    let (gatekeeper, time) = measure_time(|| {
+        Arc::new(Gatekeeper::new(
+            tip.height,
+            conf.subscription_slots,
+            conf.subscription_duration,
+            conf.expiry_delta,
+            dbm.clone(),
+        ))
+    });
+    log::debug!("Created gatekeeper in {time:?}");
 
     let carrier = Carrier::new(rpc, bitcoind_reachable.clone(), tip.height);
+    log::debug!("Created carrier");
+
     let responder = Arc::new(Responder::new(
         &last_n_blocks,
         tip.height,
@@ -231,6 +263,8 @@ async fn main() {
         gatekeeper.clone(),
         dbm.clone(),
     ));
+    log::debug!("Created responder");
+
     let watcher = Arc::new(Watcher::new(
         gatekeeper.clone(),
         responder.clone(),
@@ -240,6 +274,7 @@ async fn main() {
         TowerId(tower_pk),
         dbm.clone(),
     ));
+    log::debug!("Created watcher");
 
     if watcher.is_fresh() & responder.is_fresh() & gatekeeper.is_fresh() {
         log::info!("Fresh bootstrap");
@@ -261,7 +296,7 @@ async fn main() {
     let mut chain_monitor = ChainMonitor::new(
         spv_client,
         tip,
-        dbm,
+        dbm.clone(),
         conf.polling_delta,
         shutdown_signal_cm,
         bitcoind_reachable.clone(),

@@ -5,6 +5,7 @@ use log;
 use std::collections::hash_map::Entry;
 use std::collections::{HashMap, HashSet};
 use std::iter::FromIterator;
+use std::mem::size_of;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{Arc, Mutex};
 
@@ -141,15 +142,74 @@ impl Watcher {
     ) -> Self {
         let mut appointments = HashMap::new();
         let mut locator_uuid_map: HashMap<Locator, HashSet<UUID>> = HashMap::new();
-        for (uuid, appointment) in dbm.lock().unwrap().load_appointments(None) {
+
+        // these calculations won't take things like hashmap and hashset metadata and other stuff.
+        let mut locator_uuid_size = 0;
+        let mut appointments_size = 0;
+
+        let locked_db = dbm.lock().unwrap();
+        let sql =
+            "SELECT a.UUID, a.locator, a.encrypted_blob, a.to_self_delay, a.user_signature, a.start_block, a.user_id
+                FROM appointments as a LEFT JOIN trackers as t ON a.UUID=t.UUID WHERE t.UUID IS NULL".to_string();
+        let mut stmt = locked_db.connection.prepare(&sql).unwrap();
+
+        let rows = stmt.query([]).unwrap();
+
+        let apps = rows
+            .mapped(|row| {
+                let raw_uuid: Vec<u8> = row.get(0).unwrap();
+                let uuid = UUID::from_slice(&raw_uuid[0..20]).unwrap();
+                let raw_locator: Vec<u8> = row.get(1).unwrap();
+                let locator = Locator::from_slice(&raw_locator).unwrap();
+                let raw_userid: Vec<u8> = row.get(6).unwrap();
+                let user_id = UserId::from_slice(&raw_userid).unwrap();
+
+                let appointment =
+                    Appointment::new(locator, row.get(2).unwrap(), row.get(3).unwrap());
+                let appointment = ExtendedAppointment::new(
+                    appointment,
+                    user_id,
+                    row.get(4).unwrap(),
+                    row.get(5).unwrap(),
+                );
+                Ok((uuid, appointment))
+            })
+            .filter_map(|d| d.ok());
+
+        for (i, (uuid, appointment)) in apps.enumerate() {
             appointments.insert(uuid, appointment.get_summary());
+            // one uuid and one appointment summary.
+            appointments_size += size_of::<UUID>() + size_of::<AppointmentSummary>();
 
             if let Some(map) = locator_uuid_map.get_mut(&appointment.locator()) {
                 map.insert(uuid);
+                locator_uuid_size += size_of::<UUID>();
             } else {
                 locator_uuid_map.insert(appointment.locator(), HashSet::from_iter(vec![uuid]));
+                locator_uuid_size += size_of::<Locator>() + size_of::<UUID>();
+            }
+
+            if i % 100_000 == 0 {
+                log::debug!(
+                    "Locator uuid map size now: {}MiB",
+                    locator_uuid_size / 1024 / 1024
+                );
+                log::debug!(
+                    "Appointment map size now: {}MiB",
+                    appointments_size / 1024 / 1024
+                );
             }
         }
+        log::debug!(
+            "Final Locator uuid map size: {}MiB",
+            locator_uuid_size / 1024 / 1024
+        );
+        log::debug!(
+            "Final Appointment map size: {}MiB",
+            appointments_size / 1024 / 1024
+        );
+        drop(stmt);
+        drop(locked_db);
 
         Watcher {
             appointments: Mutex::new(appointments),
