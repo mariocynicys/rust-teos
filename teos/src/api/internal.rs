@@ -332,6 +332,10 @@ impl PrivateTowerServices for Arc<InternalAPI> {
                 .map_or("an unknown address".to_owned(), |a| a.to_string())
         );
 
+        unsafe {
+            log::debug!("Memory released: {}", libc::malloc_trim(0));
+        }
+
         Ok(Response::new(msgs::GetTowerInfoResponse {
             tower_id: self.watcher.tower_id.to_vec(),
             addresses: self.get_addresses().clone(),

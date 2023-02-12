@@ -16,6 +16,7 @@ path = "src/main.rs"
 
 [dependencies]
 # General
+libc = "0.2"
 hex = { version = "0.4.3", features = [ "serde" ] }
 home = "0.5.3"
 log = "0.4"

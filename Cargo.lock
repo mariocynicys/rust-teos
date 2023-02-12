@@ -2986,6 +2986,7 @@ dependencies = [
  "hex",
  "home",
  "jsonrpc-http-server",
+ "libc",
  "lightning",
  "lightning-block-sync",
  "lightning-net-tokio",

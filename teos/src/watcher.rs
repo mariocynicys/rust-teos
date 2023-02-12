@@ -141,13 +141,38 @@ impl Watcher {
     ) -> Self {
         let mut appointments = HashMap::new();
         let mut locator_uuid_map: HashMap<Locator, HashSet<UUID>> = HashMap::new();
-        for (uuid, appointment) in dbm.lock().unwrap().load_appointments(None) {
-            appointments.insert(uuid, appointment.get_summary());
 
-            if let Some(map) = locator_uuid_map.get_mut(&appointment.locator()) {
-                map.insert(uuid);
-            } else {
-                locator_uuid_map.insert(appointment.locator(), HashSet::from_iter(vec![uuid]));
+        let db_appointments = dbm.lock().unwrap().load_appointments(None);
+        // When using `iter()`, the memory consumption rests @2.2G after the tower has initialized.
+        // But then is further trimmed to 1.4G when issuing `malloc_trim(0)`.
+        //
+        // When not using `iter()` and directly consuming the db_appointment object, the memory
+        // consumption rests @2G and doesn't go further down with `malloc_trim(0)` calls.
+        let optimize = true;
+
+        if optimize {
+            // Get an iterator of db_appointments and then consume that iterator.
+            // Notice that db_appointments isn't consumed.
+            for (uuid, appointment) in db_appointments.iter() {
+                let uuid = *uuid;
+                appointments.insert(uuid, appointment.get_summary());
+
+                if let Some(map) = locator_uuid_map.get_mut(&appointment.locator()) {
+                    map.insert(uuid);
+                } else {
+                    locator_uuid_map.insert(appointment.locator(), HashSet::from_iter(vec![uuid]));
+                }
+            }
+        } else {
+            // Consume the db_appointments object directly.
+            for (uuid, appointment) in db_appointments {
+                appointments.insert(uuid, appointment.get_summary());
+
+                if let Some(map) = locator_uuid_map.get_mut(&appointment.locator()) {
+                    map.insert(uuid);
+                } else {
+                    locator_uuid_map.insert(appointment.locator(), HashSet::from_iter(vec![uuid]));
+                }
             }
         }
 
