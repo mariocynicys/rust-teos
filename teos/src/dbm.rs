@@ -7,7 +7,7 @@ use std::path::PathBuf;
 use std::str::FromStr;
 
 use rusqlite::limits::Limit;
-use rusqlite::{params, params_from_iter, Connection, Error as SqliteError};
+use rusqlite::{params, params_from_iter, Connection, Error as SqliteError, Row, ParamsFromIter};
 
 use bitcoin::consensus;
 use bitcoin::hashes::Hash;
@@ -19,6 +19,7 @@ use teos_common::constants::ENCRYPTED_BLOB_MAX_SIZE;
 use teos_common::dbm::{DatabaseConnection, DatabaseManager, Error};
 use teos_common::UserId;
 
+use crate::db_iterator::*;
 use crate::extended_appointment::{AppointmentSummary, ExtendedAppointment, UUID};
 use crate::gatekeeper::UserInfo;
 use crate::responder::{ConfirmationStatus, TrackerSummary, TransactionTracker};
@@ -306,31 +307,31 @@ impl DBM {
     }
 
     /// Loads all [AppointmentSummary]s from that database.
-    pub(crate) fn load_appointment_summaries(&self) -> HashMap<UUID, AppointmentSummary> {
-        let mut summaries = HashMap::new();
+    pub(crate) fn load_appointment_summaries(
+        &self,
+    ) -> QueryIterator<ParamsFromIter<[u8; 0]>, (UUID, AppointmentSummary)> {
+        let stmt = self
+                .connection
+                .prepare(
+                    "SELECT a.UUID, a.locator, a.user_id 
+                        FROM appointments as a LEFT JOIN trackers as t ON a.UUID=t.UUID WHERE t.UUID IS NULL",
+                )
+                .unwrap();
 
-        let mut stmt = self
-            .connection
-            .prepare(
-                "SELECT a.UUID, a.locator, a.user_id 
-                    FROM appointments as a LEFT JOIN trackers as t ON a.UUID=t.UUID WHERE t.UUID IS NULL",
-            )
-            .unwrap();
-        let mut rows = stmt.query([]).unwrap();
-
-        while let Ok(Some(row)) = rows.next() {
+        let func = |row: &Row| {
             let raw_uuid: Vec<u8> = row.get(0).unwrap();
             let raw_locator: Vec<u8> = row.get(1).unwrap();
             let raw_userid: Vec<u8> = row.get(2).unwrap();
-            summaries.insert(
+            (
                 UUID::from_slice(&raw_uuid).unwrap(),
                 AppointmentSummary::new(
                     Locator::from_slice(&raw_locator).unwrap(),
                     UserId::from_slice(&raw_userid).unwrap(),
                 ),
-            );
-        }
-        summaries
+            )
+        };
+
+        QueryIterator::new(stmt, params_from_iter([]), func)
     }
 
     /// Loads appointments from the database. If a locator is given, this method loads only the appointments

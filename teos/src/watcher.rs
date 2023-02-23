@@ -141,7 +141,13 @@ impl Watcher {
     ) -> Self {
         let mut appointments = HashMap::new();
         let mut locator_uuid_map: HashMap<Locator, HashSet<UUID>> = HashMap::new();
-        for (uuid, summary) in dbm.lock().unwrap().load_appointment_summaries() {
+        for (uuid, summary) in dbm
+            .lock()
+            .unwrap()
+            .load_appointment_summaries()
+            .iter()
+            .unwrap()
+        {
             if let Some(map) = locator_uuid_map.get_mut(&summary.locator) {
                 map.insert(uuid);
             } else {

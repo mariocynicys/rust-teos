@@ -13,6 +13,7 @@ pub mod carrier;
 pub mod chain_monitor;
 pub mod cli_config;
 pub mod config;
+pub mod db_iterator;
 pub mod dbm;
 #[doc(hidden)]
 mod errors;
