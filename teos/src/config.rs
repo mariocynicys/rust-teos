@@ -93,23 +93,25 @@ where
     }
 }
 
-// impl<T> Serialize for ConfigParam<T>
-// where
-//     T: DeserializeOwned,
-// {
-//     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-//     where
-//         S: serde::Serializer,
-//     {
-//         self.inner.serialize(serializer)
-//     }
-// }
+impl<T> Serialize for ConfigParam<T>
+where
+    T: Serialize,
+{
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        self.inner.serialize(serializer)
+    }
+}
 
-impl<'de, T> Deserialize<'de> for ConfigParam<T> {
+impl<'de, T> Deserialize<'de> for ConfigParam<T>
+where
+    T: DeserializeOwned,
+{
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: serde::Deserializer<'de>,
-        T: DeserializeOwned,
     {
         Ok(ConfigParam::from_file(T::deserialize(deserializer)?))
     }
@@ -217,7 +219,7 @@ pub struct Opt {
 /// - Defaults
 /// - Configuration file
 /// - Command line options
-#[derive(Debug, Deserialize, Clone, PartialEq, Eq)]
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq, Eq)]
 #[serde(default)]
 pub struct Config {
     // API
