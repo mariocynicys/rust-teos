@@ -85,3 +85,20 @@ You can open an `sh` shell using `docker exec`:
 Then begin issuing whatever `teos-cli` commands you want.
 
 Secondly, you can try using teos-cli remotely following the instructions in [the main README](https://github.com/talaia-labs/rust-teos/blob/master/README.md#running-teos-cli-remotely).
+
+### How to set up a Tor hidden service pointing to the Docker container:
+
+Notice in the above section where we cover how to pass in environment variables to the running Docker instance, the Tor options are currently not included as an option. That's because these instructions assume that users will likely be setting up Tor in another container.
+
+Whereever Tor is running, a user can follow [these instructions](https://community.torproject.org/onion-services/setup/) for setting up a hidden service manually.
+
+For instance, if you're running `teosd` on the same machine (similar to the instructions above), you can create a hidden service to hide the IP of the Teosd API (listening on port 9814) by editing your `torrc` file with the below options (but more likely you'll need to change `127.0.0.1` to the address where your `teosd` Docker container is running):
+
+```
+HiddenServiceDir /var/lib/tor/teosd
+HiddenServicePort 9814 127.0.0.1:9814
+```
+
+Then restart Tor.
+
+If all works correctly, the hidden service public key will be located in the `HiddenServiceDir` you set above, i.e. `/var/lib/tor/teosd` in the file `hostname`.
