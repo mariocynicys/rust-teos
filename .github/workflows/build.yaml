@@ -47,3 +47,11 @@ jobs:
       - name: Run clippy
         run: |
           cargo clippy --all-features --all-targets --color always -- --deny warnings
+      - name: Set up Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: '3.9'
+      - name: Install black
+        run: pip install black
+      - name: Check Python formatting
+        run: black . --check -l 120
