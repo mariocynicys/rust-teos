@@ -1,5 +1,11 @@
 #!/bin/sh
 
+# Own the data directory
+sudo chown -R teos /home/teos/.teos
+
+# Allow the configuration file to be edited by anyone (so an outside users can edit it easily)
+chmod 666 /home/teos/.teos/teos.toml
+
 # Define the start command
 START_COMMAND="teosd"
 
@@ -46,10 +52,6 @@ if [[ ! -z ${BTC_RPC_PORT} ]]; then
     START_COMMAND="$START_COMMAND --btcrpcport $BTC_RPC_PORT"
 fi
 
-if [[ ! -z ${DATA_DIR} ]]; then
-    START_COMMAND="$START_COMMAND --datadir $DATA_DIR"
-fi
-
 if [[ ! -z ${DEBUG} ]]; then
     START_COMMAND="$START_COMMAND --debug $DEBUG"
 fi
@@ -65,7 +67,6 @@ fi
 if [[ ! -z ${FORCE_UPDATE} ]]; then
     START_COMMAND="$START_COMMAND --forceupdate $FORCE_UPDATE"
 fi
-
 
 # Start the TEOS daemon
 $START_COMMAND
