@@ -9,6 +9,10 @@ edition = "2018"
 name = "watchtower-client"
 path = "src/main.rs"
 
+[[bin]]
+name = "stress"
+path = "src/stress.rs"
+
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
