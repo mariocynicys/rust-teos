@@ -34,7 +34,7 @@ async fn get_appointment(
 ) -> Result<(), http::RequestError> {
     http::process_post_response::<http::ApiResponse<common_msgs::GetAppointmentResponse>>(
         http::post_request(
-            &tower_net_addr,
+            tower_net_addr,
             Endpoint::GetAppointment,
             &common_msgs::GetAppointmentRequest {
                 locator: locator.to_vec(),
@@ -132,7 +132,7 @@ async fn main() {
         appointment_send_times.iter().min().unwrap(),
         appointment_send_times.iter().max().unwrap(),
         appointment_send_times.iter().sum::<tokio::time::Duration>()
-            / appointment_send_times.iter().count() as u32
+            / appointment_send_times.len() as u32
     );
 
     // Now retrieve all these sent appointment.
@@ -150,7 +150,7 @@ async fn main() {
             for (j, locator) in locators.iter().enumerate() {
                 let signature = sign(format!("get appointment {locator}").as_bytes(), &sk).unwrap();
                 let start = tokio::time::Instant::now();
-                get_appointment(&tower_net_addr, &locator, signature)
+                get_appointment(&tower_net_addr, locator, signature)
                     .await
                     .map_err(|e| {
                         println!("User {i} faced an error while retrieve appointment {j}: {e:?}")
@@ -182,6 +182,6 @@ async fn main() {
         appointment_send_times.iter().min().unwrap(),
         appointment_send_times.iter().max().unwrap(),
         appointment_send_times.iter().sum::<tokio::time::Duration>()
-            / appointment_send_times.iter().count() as u32
+            / appointment_send_times.len() as u32
     );
 }
