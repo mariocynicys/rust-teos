@@ -67,7 +67,7 @@ impl ConfirmationStatus {
 ///
 /// It is analogous to [ExtendedAppointment](crate::extended_appointment::ExtendedAppointment) for the [`Watcher`](crate::watcher::Watcher).
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct TransactionTracker {
+pub struct TransactionTracker {
     /// Matches the corresponding [Breach] `dispute_tx` field.
     pub dispute_tx: Transaction,
     /// Matches the corresponding [Breach] penalty_tx field.

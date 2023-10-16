@@ -26,7 +26,7 @@ use crate::tx_index::TxIndex;
 /// using the resulting dispute transaction id to decipher the encrypted blob of an ongoing [Appointment].
 /// Breaches are passed to the [Responder] once created.
 #[derive(Debug, Clone)]
-pub(crate) struct Breach {
+pub struct Breach {
     /// Transaction that triggered the breach.
     pub dispute_tx: Transaction,
     /// Transaction that will be used as a response to the breach.
@@ -46,7 +46,7 @@ impl Breach {
 /// Packs the reasons why trying to add an appointment may fail.
 // TODO: It may be nice to create richer errors so the API can return richer rejection
 #[derive(Debug)]
-pub(crate) enum AddAppointmentFailure {
+pub enum AddAppointmentFailure {
     AuthenticationFailure,
     NotEnoughSlots,
     SubscriptionExpired(u32),
@@ -55,7 +55,7 @@ pub(crate) enum AddAppointmentFailure {
 
 /// Packs the reasons why trying to query an appointment may fail.
 #[derive(Debug)]
-pub(crate) enum GetAppointmentFailure {
+pub enum GetAppointmentFailure {
     AuthenticationFailure,
     SubscriptionExpired(u32),
     NotFound,
@@ -73,7 +73,7 @@ pub(crate) enum GetSubscriptionInfoFailure {
 /// Either an [Appointment] or a [TransactionTracker] can be
 /// returned depending on whether the appointment can be found in the [Watcher] or in the [Responder].
 #[derive(Debug)]
-pub(crate) enum AppointmentInfo {
+pub enum AppointmentInfo {
     Appointment(Appointment),
     Tracker(TransactionTracker),
 }
@@ -141,7 +141,7 @@ impl Watcher {
 
     /// Registers a new user within the [Watcher]. This request is passed to the [Gatekeeper], who is in
     /// charge of managing users.
-    pub(crate) async fn register(
+    pub async fn register(
         &self,
         user_id: UserId,
     ) -> Result<RegistrationReceipt, MaxSlotsReached> {
@@ -162,7 +162,7 @@ impl Watcher {
     /// If an appointment is accepted, an [ExtendedAppointment] (constructed from the [Appointment]) will be persisted on disk.
     /// In case the locator for the given appointment can be found in the cache (meaning the appointment has been
     /// triggered recently) the data will be passed to the [Responder] straightaway (modulo it being valid).
-    pub(crate) async fn add_appointment(
+    pub async fn add_appointment(
         &self,
         appointment: Appointment,
         user_signature: String,
@@ -322,7 +322,7 @@ impl Watcher {
     /// - The user subscription has not expired
     /// - The appointment belongs to the user
     /// - The appointment exists within the system (either in the [Watcher] or the [Responder])
-    pub(crate) async fn get_appointment(
+    pub async fn get_appointment(
         &self,
         locator: Locator,
         user_signature: &str,

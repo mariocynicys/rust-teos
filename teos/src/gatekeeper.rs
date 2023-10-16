@@ -44,13 +44,13 @@ pub(crate) struct AuthenticationFailure<'a>(&'a str);
 
 /// Error raised if the user subscription has not enough slots to fit a new appointment.
 #[derive(Debug, PartialEq)]
-pub(crate) struct NotEnoughSlots;
+pub struct NotEnoughSlots;
 
 /// Error raised if the user subscription slots limit has been reached.
 ///
 /// This is currently set to [u32::MAX].
 #[derive(Debug, PartialEq)]
-pub(crate) struct MaxSlotsReached;
+pub struct MaxSlotsReached;
 
 /// Component in charge of managing access to the tower resources.
 ///
