@@ -27,7 +27,7 @@ def test_watchtower(node_factory, bitcoind, teosd):
     commitment transaction.
     """
 
-    l1, l2 = node_factory.line_graph(2, opts=[{"allow_broken_log": True}, {"plugin": WT_PLUGIN}])
+    l1, l2 = node_factory.line_graph(2, opts={"allow_broken_log": True, "plugin": WT_PLUGIN})
 
     # We need to register l2 with the tower
     tower_id = teosd.cli.gettowerinfo()["tower_id"]
